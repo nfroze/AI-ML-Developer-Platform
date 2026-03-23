@@ -1,52 +1,54 @@
-# AI/ML Internal Developer Platform
+# AI ML Developer Platform
 
-A production-grade Internal Developer Platform that enables data scientists to self-service GPU workloads while platform teams maintain cost visibility and governance—addressing the operational complexity organisations face when scaling ML infrastructure.
+A hybrid AWS platform that gives ML engineers self-service access to GPU resources, model deployment, and cost tracking — combining EKS for platform services with ECS Fargate for lightweight microservices.
 
 ## Overview
 
-Organisations adopting AI/ML workloads quickly discover that GPU resources are expensive, allocation is chaotic, and data scientists waste time on infrastructure instead of model development. This platform solves that by providing a self-service portal where teams can provision GPU training jobs, deploy models, and track costs—all while platform engineering maintains governance through automated controls.
+Organisations running ML workloads face a recurring tension: data scientists need fast access to GPU resources, but unrestricted provisioning leads to spiralling cloud costs. This platform solves both sides by integrating a developer portal (Backstage), model registry (MLflow), and a custom GPU cost tracker into a single, GitOps-managed infrastructure.
 
-The architecture uses a hybrid EKS/ECS approach: Kubernetes handles the complex orchestration of ML tools (Backstage, MLflow, ArgoCD), while the GPU cost tracking service runs on ECS Fargate. This separation allows cost-optimised compute for simple services while preserving Kubernetes flexibility for platform workloads. GitOps via ArgoCD ensures all deployments are version-controlled and self-healing.
+The architecture uses a hybrid compute approach. EKS runs the heavier platform services — ArgoCD manages deployments, Backstage provides self-service templates for GPU provisioning and model deployment, and MLflow handles experiment tracking and model registration. A custom-built GPU Cost Tracker runs on ECS Fargate, deliberately separated to demonstrate cost-optimised service placement — a simple Node.js dashboard doesn't need Kubernetes overhead.
 
-Backstage templates abstract away infrastructure complexity—developers select a framework, specify GPU count, and set runtime limits. The platform checks budget constraints, allocates resources, registers models in MLflow, and creates ArgoCD applications automatically. This demonstrates how platform engineering reduces cognitive load while enforcing organisational policies.
+Everything is provisioned through Terraform and deployed via GitHub Actions. ArgoCD watches the repo and automatically syncs Helm-based deployments to the cluster, while the CI/CD pipeline handles container builds with Trivy security scanning before pushing to ECR.
 
 ## Architecture
 
-![Cloud Architecture](screenshots/cloud-architecture.png)
+![](screenshots/cloud-architecture.png)
 
-The platform spans two compute services within a shared VPC. EKS runs the developer-facing tools: Backstage serves as the unified portal, MLflow handles model registry and experiment tracking, and ArgoCD manages GitOps deployments. A custom GPU Cost Tracker service runs independently on ECS Fargate, providing real-time spend visibility and resource allocation APIs.
-
-Request flow starts at Backstage: a developer uses a software template to request GPU resources. The template triggers API calls to the Cost Tracker to verify budget availability, then allocates GPUs and registers the model in MLflow. ArgoCD detects the new application manifest and deploys the workload to the cluster. The Cost Tracker continuously aggregates spend data, surfacing it through a dashboard accessible to both developers and finance.
-
-Terraform provisions the complete infrastructure—VPC with public/private subnets, EKS cluster with managed node groups, ECS cluster with Fargate tasks, ALB for external access, ECR for container images, and all supporting IAM roles and security groups. The Helm provider deploys platform services directly from Terraform, creating a single deployment pipeline from infrastructure to application.
+The system operates across two compute planes within a single VPC. Public subnets host the Application Load Balancer for the cost tracker, while all workloads run in private subnets behind a NAT gateway. EKS nodes host ArgoCD, Backstage, and MLflow in separate namespaces. The ECS Fargate task pulls its container image from ECR and sends logs to CloudWatch. Backstage templates communicate with both MLflow (for model registration) and the cost tracker (for budget checks and GPU allocation) via internal service endpoints. The ECS task role has read-only access to the EKS cluster, allowing the cost dashboard to surface cluster-level GPU metrics.
 
 ## Tech Stack
 
-**Infrastructure**: AWS EKS, ECS Fargate, VPC, ALB, ECR, Terraform  
-**Platform Services**: Backstage, MLflow, ArgoCD  
-**Deployment**: Helm, GitOps, Kubernetes  
-**Custom Service**: Node.js, Express, Chart.js  
-**Observability**: CloudWatch Container Insights
+**Infrastructure**: AWS EKS, ECS Fargate, VPC (multi-AZ), ALB, ECR, CloudWatch, IAM, S3 (Terraform state)
+
+**CI/CD**: GitHub Actions, ArgoCD (GitOps), Helm
+
+**Platform Services**: Backstage (developer portal), MLflow (model registry)
+
+**Application**: Node.js, Express, Chart.js
+
+**Security**: Trivy container scanning, ECR scan-on-push, private subnets, least-privilege IAM roles
+
+**IaC**: Terraform with AWS community modules (VPC, EKS)
 
 ## Key Decisions
 
-- **Hybrid EKS/ECS architecture**: Kubernetes excels at orchestrating complex, stateful platform services, but running simple API services on EKS adds unnecessary overhead. The Cost Tracker runs on Fargate at ~70% lower cost than equivalent EKS capacity, demonstrating cost-conscious architecture decisions.
+- **Hybrid EKS + ECS Fargate**: The cost tracker is a stateless Node.js service — running it on Fargate avoids dedicating Kubernetes resources to a lightweight dashboard. This mirrors a real-world pattern where not every service justifies cluster overhead.
 
-- **Backstage as the developer portal**: Rather than exposing raw Kubernetes, MLflow, and ArgoCD interfaces, Backstage provides a unified abstraction layer. Software templates encode organisational standards—GPU limits, budget checks, naming conventions—making compliance automatic rather than manual.
+- **ArgoCD over direct Helm deploys**: GitOps provides drift detection and self-healing. Backstage templates create ArgoCD applications rather than running `helm install`, keeping the cluster state declarative and auditable.
 
-- **Budget enforcement at allocation time**: The Cost Tracker doesn't just report spend after the fact; it integrates with Backstage templates to approve or reject GPU requests based on remaining budget. This prevents runaway costs before resources are provisioned.
+- **Backstage as the control plane**: Instead of giving engineers direct `kubectl` access, the platform exposes GPU provisioning and model deployment through Backstage templates with built-in budget checks — enforcing cost controls before resources are allocated.
 
-- **GitOps for ML deployments**: Model deployments flow through ArgoCD rather than direct kubectl applies. This creates an audit trail of what was deployed, enables rollbacks, and ensures the cluster state matches the Git repository—critical for regulated ML environments.
+- **Single NAT gateway**: A deliberate cost optimisation for a demo environment. In production, this would be one-per-AZ for high availability, but the architecture is structured to make that a single-variable change.
 
 ## Screenshots
 
-![ArgoCD dashboard](screenshots/argocd-dashboard.png)
+![](screenshots/backstage-portal.png)
 
-![Cost Tracker interface](screenshots/cost-tracker.png)
+![](screenshots/argocd-dashboard.png)
 
-![Backstage portal](screenshots/backstage-portal.png)
+![](screenshots/mlflow-registry.png)
 
-![MLflow registry](screenshots/mlflow-registry.png)
+![](screenshots/cost-tracker.png)
 
 ## Author
 
