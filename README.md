@@ -42,11 +42,19 @@ The system operates across two compute planes within a single VPC. Public subnet
 
 ## Screenshots
 
+**Backstage Developer Portal** — The self-service portal login screen with guest access option. This is the control plane where engineers request GPU resources and model deployments through templated workflows, rather than directly accessing Kubernetes.
+
 ![](screenshots/backstage-portal.png)
+
+**ArgoCD GitOps Dashboard** — Applications view showing two Helm deployments (Backstage and MLflow) with healthy status and recent sync records. ArgoCD automatically syncs these applications from the Git repository, providing drift detection and audit trails for all cluster changes.
 
 ![](screenshots/argocd-dashboard.png)
 
+**MLflow Experiment Tracking** — The experiments view in dark mode showing the MLflow 3.2.0 interface with a "Default" experiment created on 08/11/2025. This is where data scientists log their training runs and manage model versions for the registry.
+
 ![](screenshots/mlflow-registry.png)
+
+**GPU Cost Tracker Dashboard** — A Node.js/Chart.js dashboard displaying real-time metrics: total spend ($2453.67), GPU resource allocation across instance types, and a cost breakdown chart by compute cluster. This runs on ECS Fargate to demonstrate cost-optimized service placement.
 
 ![](screenshots/cost-tracker.png)
 
